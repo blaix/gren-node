@@ -1,0 +1,65 @@
+module HttpServer.Response exposing
+    ( Response
+    , toResponse
+    , setBody
+    , setHeader
+    , setStatus
+    , send
+    )
+
+
+import Dict exposing (Dict)
+import Task exposing (Task)
+
+
+type Response =
+    Response KernelResponse
+        { status : Int
+        , headers : Dict String String
+        , body : String -- TODO: support bytes
+        }
+
+
+type KernelResponse =
+    -- Note: Actual implementation in Kernel code
+    KernelResponse
+
+
+toResponse : KernelResponse -> Response
+toResponse response =
+    Response response
+        { status = 200
+        , body = ""
+        , headers = Dict.empty
+        }
+
+
+setStatus : Int -> Response -> Response
+setStatus statusCode (Response kernelResponse response) =
+    Response kernelResponse { response | status = statusCode }
+
+
+setHeader : String -> String -> Response -> Response
+setHeader key value (Response kernelResponse response) =
+    Response kernelResponse
+        { response 
+            | headers = Dict.insert key value response.headers
+        }
+
+
+setBody : String -> Response -> Response
+setBody body (Response kernelResponse response) =
+    Response kernelResponse
+        { response | body = body }
+
+
+send : Response -> Task Never Response
+send (Response kernelResponse response) =
+    let
+        headersArray
+            = Dict.toArray response.headers
+    in
+    Gren.Kernel.HttpServer.setStatus response.status kernelResponse
+        |> Task.andThen (Gren.Kernel.HttpServer.setHeaders headersArray)
+        |> Task.andThen (Gren.Kernel.HttpServer.setBody response.body)
+        |> Task.andThen (Gren.Kernel.HttpServer.endResponse)

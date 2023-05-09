@@ -1,0 +1,292 @@
+effect module HttpServer where { subscription = MySub } exposing
+    ( ServerError(..)
+    , Request
+    , Server
+    , Method(..)
+    , createServer
+    , initialize
+    , onRequest
+    , toRequest
+    , requestInfo
+    )
+
+
+import Bytes exposing (Bytes)
+import Dict exposing (Dict)
+import Init
+import Internal.Init
+import Node
+import Task exposing (Task)
+import Gren.Kernel.HttpServer
+import HttpServer.Response as Response exposing (Response)
+import Url exposing (Url, Protocol(..))
+
+
+-- TODO: docs!
+-- Preview with:
+--   npm install -g gren-packages
+--   gren-doc-preview
+
+
+type Server
+    -- Note: Actual implementation in Kernel code
+    = Server
+
+
+type alias Request =
+    { headers : Dict String String
+    , method : Method
+    , body : String  -- TODO: support bytes
+    , url : Url
+    }
+
+
+type Method
+    = GET
+    | HEAD
+    | POST
+    | PUT
+    | DELETE
+    | CONNECT
+    | TRACE
+    | PATCH
+    | UNKNOWN
+
+
+type Permission
+    = Permission
+
+
+{-| Errors from node http.server
+    which inherits from net.server, see: <https://nodejs.org/api/net.html#event-error>
+    The two strings will contain the error code and message respectively.
+    Room for improvement here if we match on code and return more specific types.
+-}
+type ServerError =
+    ServerError String String
+
+
+initialize : Init.Task Permission
+initialize =
+    Task.succeed Permission
+        |> Internal.Init.Task
+
+
+createServer : Permission -> { host : String, port_ : Int } -> Task ServerError Server
+createServer _ options =
+    Gren.Kernel.HttpServer.createServer options.host options.port_
+
+
+toRequest :
+    { urlProtocol : String
+    , urlHost : String
+    , urlPort : String
+    , urlPath : String
+    , urlQuery : String
+    , urlFragment : String
+    , headers : Array String
+    , method : String
+    , body : String
+    }
+    -> Request
+toRequest 
+    { urlProtocol
+    , urlHost
+    , urlPort
+    , urlPath
+    , urlQuery
+    , urlFragment
+    , headers
+    , method
+    , body 
+    } =
+    { method = toMethod method
+    , body = body
+    , headers =
+        headers
+            |> arrayPairs
+            |> dictFromPairs
+    , url =
+        { protocol = 
+            if urlProtocol == "https:" then
+                Https
+            else
+                Http
+        , host = urlHost
+        , path = urlPath
+        , port_ = String.toInt urlPort
+        , query = 
+            if urlQuery == "" then
+                Nothing
+            else
+                Just urlQuery
+        , fragment =
+            if urlFragment == "" then
+                Nothing
+            else
+                Just urlFragment
+        }
+    }
+
+
+toMethod : String -> Method
+toMethod s =
+    case s of
+        "GET" ->
+            GET
+        
+        "HEAD" ->
+            HEAD
+
+        "POST" ->
+            POST
+        
+        "PUT" ->
+            PUT
+        
+        "DELETE" ->
+            DELETE
+        
+        "CONNECT" ->
+            CONNECT
+        
+        "TRACE" ->
+            TRACE
+        
+        "PATCH" ->
+            PATCH
+        
+        _ ->
+            UNKNOWN
+
+
+arrayPairs : Array String -> Array (Array String)
+arrayPairs a =
+    let
+        pair = 
+            Array.takeFirst 2 a
+        
+        rest =
+            Array.dropFirst 2 a
+        
+        allPairs =
+            [ pair ] ++ case rest of
+                [] ->
+                    []
+                
+                _ ->
+                    arrayPairs rest
+    in
+    allPairs
+
+
+dictFromPairs : Array (Array String) -> Dict String String
+dictFromPairs pairs =
+    let
+        mapper p =
+            case p of
+                [a, b] ->
+                    Just { key = a, value = b }
+                
+                _ ->
+                    Nothing
+        
+        array =
+            Array.filterMap mapper pairs
+    in
+    Dict.fromArray array
+
+
+-- EFFECT STUFF
+
+
+type MySub msg
+    = OnRequestSub Server (Request -> Response -> msg)
+
+
+subMap : (a -> b) -> MySub a -> MySub b
+subMap f sub =
+    case sub of
+        OnRequestSub server msg ->
+            -- TODO: not sure this is right
+            OnRequestSub server (\req res -> f (msg req res))
+
+
+type alias State msg =
+    Array (MySub msg)
+
+
+init : Task Never (State msg)
+init =
+    Task.succeed []
+
+
+onEffects : Platform.Router msg event -> Array (MySub msg) -> State msg -> Task Never (State msg)
+onEffects router subs state =
+    -- TODO: not sure "remove all, then add" is the right or best strategy here...
+    let
+        _removeListeners =
+            state
+                |> Array.map
+                    (\(OnRequestSub server _) ->
+                        Gren.Kernel.HttpServer.removeAllListeners server
+                    )
+        
+        _addListeners =
+            subs
+                |> Array.map
+                    (\(OnRequestSub server msg) ->
+                        Gren.Kernel.HttpServer.addListener server router msg
+                    )
+    in
+    Task.succeed subs
+
+
+type SelfMsg =
+    Never
+    -- | GotRequest
+
+
+onSelfMsg : Platform.Router msg SelfMsg -> SelfMsg -> (State msg) -> Task Never (State msg)
+onSelfMsg _ _ state =
+    Task.succeed state
+
+
+onRequest : Server -> (Request -> Response -> msg) -> Sub msg
+onRequest server tagger =
+    subscription (OnRequestSub server tagger)
+
+
+requestInfo : Request -> String
+requestInfo req =
+    let
+        method
+            = case req.method of
+                GET ->
+                    "GET"
+
+                HEAD ->
+                    "HEAD"
+
+                POST ->
+                    "POST"
+
+                PUT ->
+                    "PUT"
+
+                DELETE ->
+                    "DELETE"
+
+                CONNECT ->
+                    "CONNECT"
+
+                TRACE ->
+                    "TRACE"
+
+                PATCH ->
+                    "PATCH"
+
+                UNKNOWN ->
+                    "UNKNOWN"
+    in
+    method ++ " " ++ req.url.path
