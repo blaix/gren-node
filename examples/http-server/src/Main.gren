@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Node
 import Bytes exposing (Bytes)
-import Bytes.Encode as BE
+import Bytes.Decode as Decode
 import Dict
 import Stream exposing (Stream)
 import Node exposing (Environment, Program)
@@ -82,7 +82,14 @@ update msg model =
                         }
                     
                     { method = POST } ->
-                        { body = "You posted: " ++ req.body
+                        let
+                            -- TODO: add `Request.bodyAsString` and `Request.bodyFromJson <decoder>` helpers
+                            bodyStr = 
+                                req.body
+                                    |> Decode.decode (Decode.string <| Bytes.width req.body)
+                                    |> Maybe.withDefault "Oops! Can't decode body."
+                        in
+                        { body = "You posted: " ++ bodyStr
                         , status = 200
                         }
                     

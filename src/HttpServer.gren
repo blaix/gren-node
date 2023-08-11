@@ -36,7 +36,7 @@ type Server
 type alias Request =
     { headers : Dict String String
     , method : Method
-    , body : String  -- TODO: support bytes
+    , body : Bytes
     , url : Url
     }
 
@@ -86,7 +86,7 @@ toRequest :
     , urlFragment : String
     , headers : Array String
     , method : String
-    , body : String
+    , body : Bytes
     }
     -> Request
 toRequest 

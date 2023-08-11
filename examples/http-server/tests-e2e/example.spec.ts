@@ -48,3 +48,9 @@ test("responding to stream requests", async ({ request }) => {
   await expect(await response.text()).toContain("test.txt");
   await expect(await response.text()).toContain("abc123");
 });
+
+test("handling unicode", async ({ request }) => {
+  let response = await request.post("/", { data: "snow ❄ flake" });
+  await expect(response.headers()["content-type"]).toBe("text/html");
+  await expect(await response.text()).toContain("You posted: snow ❄ flake");
+});

@@ -41,6 +41,7 @@ var _HttpServer_addListener = F3(function (server, router, msg) {
       // Currently, if the request never ends (because of an error, or...?)
       // the server will hang until manually killed.
       .on("end", function () {
+        const buffer = Buffer.concat(body);
         let grenRequest = __HttpServer_toRequest({
           __$urlProtocol: url.protocol,
           __$urlHost: url.hostname,
@@ -50,7 +51,7 @@ var _HttpServer_addListener = F3(function (server, router, msg) {
           __$urlFragment: url.hash,
           __$headers: request.rawHeaders,
           __$method: request.method,
-          __$body: Buffer.concat(body).toString(),
+          __$body: new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
         });
         let grenResponse = __Response_toResponse(response);
         __Scheduler_rawSpawn(
