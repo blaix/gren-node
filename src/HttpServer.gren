@@ -1,4 +1,4 @@
-effect module HttpServer where { subscription = MySub } exposing
+effect module HttpServer where { subscription = HttpSub } exposing
     ( ServerError(..)
     , Request
     , Server
@@ -200,11 +200,11 @@ dictFromPairs pairs =
 -- EFFECT STUFF
 
 
-type MySub msg
+type HttpSub msg
     = OnRequestSub Server (Request -> Response -> msg)
 
 
-subMap : (a -> b) -> MySub a -> MySub b
+subMap : (a -> b) -> HttpSub a -> HttpSub b
 subMap f sub =
     case sub of
         OnRequestSub server msg ->
@@ -213,7 +213,7 @@ subMap f sub =
 
 
 type alias State msg =
-    Array (MySub msg)
+    Array (HttpSub msg)
 
 
 init : Task Never (State msg)
@@ -221,7 +221,7 @@ init =
     Task.succeed []
 
 
-onEffects : Platform.Router msg event -> Array (MySub msg) -> State msg -> Task Never (State msg)
+onEffects : Platform.Router msg event -> Array (HttpSub msg) -> State msg -> Task Never (State msg)
 onEffects router subs state =
     -- TODO: not sure "remove all, then add" is the right or best strategy here...
     let
