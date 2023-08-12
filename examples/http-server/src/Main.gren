@@ -31,7 +31,6 @@ type alias Model =
 type Msg
     = CreateServerResult (Result Http.ServerError Http.Server)
     | GotRequest Http.Request Response
-    | ResponseFinished Response
 
 
 init : Environment -> Init.Task { model : Model, command : Cmd Msg }
@@ -105,13 +104,7 @@ update msg model =
                     |> Response.setHeader "Content-type" "text/html"
                     |> Response.setHeader "X-Custom-Header" "hey there"
                     |> Response.setBody ("<html>" ++ body ++ "</html>")
-                    |> Response.send
-                    |> Task.perform ResponseFinished
-            }
-
-        ResponseFinished _ ->
-            { model = model
-            , command = Stream.sendLine model.stdout "completed response"
+                    |> Http.respond
             }
 
 

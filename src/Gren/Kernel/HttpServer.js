@@ -67,31 +67,23 @@ var _HttpServer_removeAllListeners = function (server) {
 };
 
 var _HttpServer_setStatus = F2(function (status, res) {
-  return __Scheduler_binding(function (callback) {
-    res.statusCode = status;
-    return callback(__Scheduler_succeed(res));
-  });
+  res.statusCode = status;
+  return res;
 });
 
 var _HttpServer_setHeaders = F2(function (headers, res) {
-  return __Scheduler_binding(function (callback) {
-    headers.forEach(function (h) {
-      res.setHeader(h.__$key, h.__$value);
-    });
-    return callback(__Scheduler_succeed(res));
+  headers.forEach(function (h) {
+    res.setHeader(h.__$key, h.__$value);
   });
+  return res;
 });
 
 var _HttpServer_setBody = F2(function (body, res) {
-  return __Scheduler_binding(function (callback) {
-    res.write(body);
-    return callback(__Scheduler_succeed(res));
-  });
+  res.write(body);
+  return res;
 });
 
 var _HttpServer_endResponse = function (res) {
-  return __Scheduler_binding(function (callback) {
-    res.end();
-    return callback(__Scheduler_succeed(res));
-  });
+  res.end();
+  return {};
 };

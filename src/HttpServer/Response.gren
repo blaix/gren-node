@@ -1,10 +1,9 @@
 module HttpServer.Response exposing
-    ( Response
+    ( Response(..)
     , toResponse
     , setBody
     , setHeader
     , setStatus
-    , send
     )
 
 
@@ -51,15 +50,3 @@ setBody : String -> Response -> Response
 setBody body (Response kernelResponse response) =
     Response kernelResponse
         { response | body = body }
-
-
-send : Response -> Task Never Response
-send (Response kernelResponse response) =
-    let
-        headersArray
-            = Dict.toArray response.headers
-    in
-    Gren.Kernel.HttpServer.setStatus response.status kernelResponse
-        |> Task.andThen (Gren.Kernel.HttpServer.setHeaders headersArray)
-        |> Task.andThen (Gren.Kernel.HttpServer.setBody response.body)
-        |> Task.andThen (Gren.Kernel.HttpServer.endResponse)

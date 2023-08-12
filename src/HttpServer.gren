@@ -1,4 +1,4 @@
-effect module HttpServer where { subscription = HttpSub } exposing
+effect module HttpServer where { command = HttpCmd, subscription = HttpSub } exposing
     ( ServerError(..)
     , Request
     , Server
@@ -8,6 +8,7 @@ effect module HttpServer where { subscription = HttpSub } exposing
     , onRequest
     , toRequest
     , requestInfo
+    , respond
     )
 
 
@@ -18,7 +19,7 @@ import Internal.Init
 import Node
 import Task exposing (Task)
 import Gren.Kernel.HttpServer
-import HttpServer.Response as Response exposing (Response)
+import HttpServer.Response exposing (Response(..))
 import Url exposing (Url, Protocol(..))
 
 
@@ -200,8 +201,19 @@ dictFromPairs pairs =
 -- EFFECT STUFF
 
 
+type HttpCmd a
+    = SendResponse Response
+
+
 type HttpSub msg
     = OnRequestSub Server (Request -> Response -> msg)
+
+
+cmdMap : (a -> b) -> HttpCmd a -> HttpCmd b
+cmdMap _ cmd =
+    case cmd of
+        SendResponse r ->
+            SendResponse r
 
 
 subMap : (a -> b) -> HttpSub a -> HttpSub b
@@ -221,10 +233,16 @@ init =
     Task.succeed []
 
 
-onEffects : Platform.Router msg event -> Array (HttpSub msg) -> State msg -> Task Never (State msg)
-onEffects router subs state =
-    -- TODO: not sure "remove all, then add" is the right or best strategy here...
+onEffects
+    : Platform.Router msg SelfMsg
+    -> Array (HttpCmd a)
+    -> Array (HttpSub msg)
+    -> State msg
+    -> Task Never (State msg)
+onEffects router cmds subs state =
     let
+        -- TODO: look at Termina.gren for a better way to manage subscriptions
+        -- For now just removing them all then re-adding.
         _removeListeners =
             state
                 |> Array.map
@@ -238,13 +256,24 @@ onEffects router subs state =
                     (\(OnRequestSub server msg) ->
                         Gren.Kernel.HttpServer.addListener server router msg
                     )
+
+        _sendResponses =
+            cmds
+                |> Array.map
+                    (\(SendResponse (Response kernelResponse response)) ->
+                        -- Terminal.gren sends to self and makes the kernel calls in onSelfMsg,
+                        -- but I couldn't get a self msg to trigger onSelfMsg when I tried that.
+                        Gren.Kernel.HttpServer.setStatus response.status kernelResponse
+                            |> Gren.Kernel.HttpServer.setHeaders (Dict.toArray response.headers)
+                            |> Gren.Kernel.HttpServer.setBody response.body
+                            |> Gren.Kernel.HttpServer.endResponse
+                    )
     in
     Task.succeed subs
 
 
 type SelfMsg =
     Never
-    -- | GotRequest
 
 
 onSelfMsg : Platform.Router msg SelfMsg -> SelfMsg -> (State msg) -> Task Never (State msg)
@@ -290,3 +319,8 @@ requestInfo req =
                     "UNKNOWN"
     in
     method ++ " " ++ req.url.path
+
+
+respond : Response -> Cmd a
+respond response =
+    command (SendResponse response)
