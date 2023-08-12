@@ -6,7 +6,7 @@ import Bytes.Decode as Decode
 import Dict
 import Stream exposing (Stream)
 import Node exposing (Environment, Program)
-import HttpServer as Http exposing (ServerError(..), Method(..))
+import HttpServer as Http exposing (ServerError(..), Method(..), Request)
 import HttpServer.Response as Response exposing (Response)
 import Init
 import Task
@@ -24,13 +24,14 @@ main =
 type alias Model =
     { stdout : Stream
     , stderr : Stream
-    , server : Maybe Http.Server
+    , servers : Array Http.Server
     }
 
 
 type Msg
-    = CreateServerResult (Result Http.ServerError Http.Server)
-    | GotRequest Http.Request Response
+    = CreateServersResult (Result Http.ServerError (Array Http.Server))
+    | GotRequest1 Http.Request Response
+    | GotRequest2 Http.Request Response
 
 
 init : Environment -> Init.Task { model : Model, command : Cmd Msg }
@@ -40,79 +41,97 @@ init env =
             { model =
                 { stdout = env.stdout
                 , stderr = env.stderr
-                , server = Nothing
+                , servers = []
                 }
             , command =
-                Task.attempt CreateServerResult <|
-                    Http.createServer serverPermission
-                        { host = "0.0.0.0"
-                        , port_ = 3000
-                        }
+                Task.attempt CreateServersResult <|
+                    Task.sequence 
+                        [ Http.createServer serverPermission
+                            { host = "0.0.0.0"
+                            , port_ = 3000
+                            }
+                        , Http.createServer serverPermission
+                            { host = "0.0.0.0"
+                            , port_ = 3001
+                            }
+                        ]
             }
 
 
 update : Msg -> Model -> { model : Model, command : Cmd Msg }
 update msg model =
     case msg of
-        CreateServerResult result ->
-            case result of
-                Ok server ->
-                    { model = { model | server = Just server }
+        CreateServersResult results ->
+            case results of
+                Ok servers ->
+                    { model = { model | servers = servers }
                     , command = Stream.sendLine model.stdout
-                        "Server started"
+                        "Servers started"
                     }
                 Err (ServerError code message) ->
                     { model = model
                     , command = Stream.sendLine model.stderr <|
-                        "Server failed to start: " ++ code ++ "\n" ++ message
+                        "Servers failed to start: " ++ code ++ "\n" ++ message
                     }
         
-        GotRequest req res ->
-            let
-                { body, status } = case { method = req.method, path = req.url.path } of
-                    { method = GET, path = "/" } ->
-                        { body = "Welcome!"
-                        , status = 200
-                        }
-
-                    { method = GET, path = "/hello" } ->
-                        { body = "Hello to you too!"
-                        , status = 200
-                        }
-                    
-                    { method = POST } ->
-                        let
-                            -- TODO: add `Request.bodyAsString` and `Request.bodyFromJson <decoder>` helpers
-                            bodyStr = 
-                                req.body
-                                    |> Decode.decode (Decode.string <| Bytes.width req.body)
-                                    |> Maybe.withDefault "Oops! Can't decode body."
-                        in
-                        { body = "You posted: " ++ bodyStr
-                        , status = 200
-                        }
-                    
-                    _ ->
-                        { body = "Not found: " ++ (Http.requestInfo req)
-                        , status = 404
-                        }
-            in
+        GotRequest1 req res ->
             { model = model
-            , command =
-                res
-                    |> Response.setStatus status
-                    |> Response.setHeader "Content-type" "text/html"
-                    |> Response.setHeader "X-Custom-Header" "hey there"
-                    |> Response.setBody ("<html>" ++ body ++ "</html>")
-                    |> Http.respond
+            , command = handleRequest req res
             }
+
+        GotRequest2 req res ->
+            { model = model
+            , command = handleRequest req res
+            }
+
+
+handleRequest : Request -> Response -> Cmd Msg
+handleRequest req res =
+    let
+        { body, status } = case { method = req.method, path = req.url.path } of
+            { method = GET, path = "/" } ->
+                { body = "Welcome!"
+                , status = 200
+                }
+
+            { method = GET, path = "/hello" } ->
+                { body = "Hello to you too!"
+                , status = 200
+                }
+        
+            { method = POST } ->
+                let
+                    -- TODO: add `Request.bodyAsString` and `Request.bodyFromJson <decoder>` helpers
+                    bodyStr = 
+                        req.body
+                            |> Decode.decode (Decode.string <| Bytes.width req.body)
+                            |> Maybe.withDefault "Oops! Can't decode body."
+                in
+                { body = "You posted: " ++ bodyStr
+                , status = 200
+                }
+        
+            _ ->
+                { body = "Not found: " ++ (Http.requestInfo req)
+                , status = 404
+                }
+    in
+    res
+        |> Response.setStatus status
+        |> Response.setHeader "Content-type" "text/html"
+        |> Response.setHeader "X-Custom-Header" "hey there"
+        |> Response.setBody ("<html>" ++ body ++ "</html>")
+        |> Http.respond
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model.server of
-        Just server ->
-            Http.onRequest server GotRequest
+    case model.servers of
+        [server1, server2] ->
+            Sub.batch
+                [ Http.onRequest server1 GotRequest2
+                , Http.onRequest server2 GotRequest2
+                ]
 
-        Nothing ->
+        _ ->
             Sub.none
