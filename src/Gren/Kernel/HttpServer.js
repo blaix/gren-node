@@ -7,7 +7,8 @@ import Platform exposing (sendToApp, sendToSelf)
 
 */
 
-const httpServer = require("http");
+const httpServer = require("node:http");
+const httpServer__crypto = require("node:crypto");
 
 var _HttpServer_createServer = F2(function (host, port) {
   return __Scheduler_binding(function (callback) {
@@ -25,6 +26,10 @@ var _HttpServer_createServer = F2(function (host, port) {
 
 var _HttpServer_addListener = F3(function (server, router, msg) {
   server.on("request", function (request, response) {
+    if (!request.headers["x-request-id"] || request.headers["x-request-id"].length < 32) {
+      request.rawHeaders.push("X-Request-ID");
+      request.rawHeaders.push(httpServer__crypto.randomUUID());
+    }
     // May want to support non-http protocols, proxies, and X-Forwarded-For header(s).
     // Note: the `request` here is a node `http.IncomingMessage`, not a `http.ClientRequest`,
     // so we can't just look at `request.protocol`, etc.
