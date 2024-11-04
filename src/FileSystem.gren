@@ -426,6 +426,7 @@ createReadStream : Permission -> Path -> Task Error (Stream.Readable Bytes)
 createReadStream _ path =
     -- TODO: errors?
     -- TODO: rename createReadableStream
+    -- TODO: ignore examples/**/app and remove examples/streams/app from repo
     Gren.Kernel.FileSystem.createReadStream path
 
 {-| Write the given `Bytes` into a file. The file will be created if it doesn't exist,
