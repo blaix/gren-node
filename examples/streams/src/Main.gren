@@ -1,0 +1,76 @@
+module Main exposing (main)
+
+import Bytes exposing (Bytes)
+import Node
+import Init
+import Task
+import FileSystem
+import FileSystem.Path as Path
+import Stream
+
+
+type alias Model =
+    { stdout : Stream.Writable Bytes
+    , fsPerm : FileSystem.Permission
+    }
+
+
+type Msg 
+    = NoOp
+
+
+type StreamError
+    = FileError FileSystem.Error
+    | StreamError Stream.Error
+
+
+main : Node.Program Model Msg
+main =
+    Node.defineProgram
+        { init = init
+        , update = update
+        , subscriptions = \_ -> Sub.none
+        }
+
+
+init : Node.Environment -> Init.Task { model : Model, command : Cmd Msg }
+init env =
+    let
+        writeLine stream string =
+            Stream.writeLineAsBytes string stream
+                |> Task.mapError StreamError
+    in
+    Init.await FileSystem.initialize <| \fsPerm ->
+        Node.startProgram
+            { model = 
+                { stdout = env.stdout
+                , fsPerm = fsPerm
+                }
+            , command =
+                -- is hello world even working?!
+                Cmd.none
+                {-
+                FileSystem.createReadStream fsPerm (Path.fromPosixString "./file.txt")
+                    |> Task.mapError FileError
+                    |> Task.andThen (Stream.read >> (Task.mapError StreamError))
+                    |> Task.map (.value >> Bytes.toString >> Maybe.withDefault "")
+                    |> Task.andThen (writeLine env.stdout)
+                    |> Task.mapError Debug.toString
+                    |> Task.onError
+                        (\error ->
+                            writeLine env.stderr error
+                                |> Task.onError (\_ -> Task.succeed {})
+                                |> Task.andThen (\_ -> Node.exitWithCode 1)
+                        )
+                    |> Task.execute
+                -}
+            }
+
+
+update : Msg -> Model -> { model : Model, command : Cmd Msg }
+update msg model =
+    case msg of
+        NoOp ->
+            { model = model
+            , command = Cmd.none
+            }

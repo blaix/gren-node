@@ -510,6 +510,16 @@ var _FileSystem_readFile = function (path) {
   });
 };
 
+var _FileSystem_createReadStream = function (path) {
+  return __Scheduler_binding(function (callback) {
+    console.log("one");
+    const readableStream = fs.createReadStream(path);
+    console.log("two");
+    callback(__Scheduler_succeed(readableStream));
+    console.log("three");
+  });
+};
+
 var _FileSystem_readLink = function (path) {
   return __Scheduler_binding(function (callback) {
     fs.readlink(__FilePath_toString(path), function (err, linkedPath) {

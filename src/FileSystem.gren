@@ -34,6 +34,7 @@ effect module FileSystem where { subscription = FileSystemSub } exposing
     , copyFile
     , readFile
     , writeFile
+    , createReadStream
     , truncateFile
     , remove
     -- Directories
@@ -102,6 +103,7 @@ import Init
 import Internal.Init
 import Time
 import Process
+import Stream
 
 
 {-| This value represents the permission to perform file system operations.
@@ -418,6 +420,13 @@ readFile : Permission -> Path -> Task Error Bytes
 readFile _ path =
     Gren.Kernel.FileSystem.readFile path
 
+{-| Read a file as a stream.
+-}
+createReadStream : Permission -> Path -> Task Error (Stream.Readable Bytes)
+createReadStream _ path =
+    -- TODO: errors?
+    -- TODO: rename createReadableStream
+    Gren.Kernel.FileSystem.createReadStream path
 
 {-| Write the given `Bytes` into a file. The file will be created if it doesn't exist,
 and overwritten if it does.
